@@ -1,4 +1,5 @@
-import { type InfiniteData, useQuery } from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
+import { type InfiniteData, useQueryClient } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   PAGINATED_CONVERSATIONS_DEFAULT_LIMIT,
@@ -51,21 +52,35 @@ export function pickLatestRuntimeAcpModels(
 
 /**
  * Home screen (no session yet): the last live model list the provider
- * reported. Reads the sidebar's conversations query from the cache
- * (``enabled: false``): reactive, but never fetches and adds no dependency
- * on the sidebar's routing/auth gates to the chat input.
+ * reported, read from the sidebar's conversations query. Subscribes to the
+ * query cache instead of registering a query observer: an observer here would
+ * share the sidebar's query and replace its options (an observer without a
+ * ``queryFn`` breaks the sidebar's refetches), and calling
+ * ``usePaginatedConversations`` would pull its routing/auth gates into the
+ * chat input. Never fetches.
  */
 export function useLatestRuntimeAcpModels(
   acpServerKey: string | null | undefined,
 ): AcpRuntimeModel[] {
+  const queryClient = useQueryClient();
   const { backend, orgId } = useActiveBackend();
-  const { data } = useQuery<InfiniteData<AppConversationPage>>({
-    queryKey: paginatedConversationsQueryKey(
-      PAGINATED_CONVERSATIONS_DEFAULT_LIMIT,
-      backend.id,
-      orgId,
-    ),
-    enabled: false,
-  });
+  const queryKey = paginatedConversationsQueryKey(
+    PAGINATED_CONVERSATIONS_DEFAULT_LIMIT,
+    backend.id,
+    orgId,
+  );
+  const keyHash = JSON.stringify(queryKey);
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  const getSnapshot = useCallback(
+    () =>
+      queryClient.getQueryData<InfiniteData<AppConversationPage>>(
+        JSON.parse(keyHash),
+      ),
+    [queryClient, keyHash],
+  );
+  const data = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return pickLatestRuntimeAcpModels(data?.pages, acpServerKey);
 }

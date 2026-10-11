@@ -1,6 +1,10 @@
 import React from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { paginatedConversationsQueryKey } from "#/hooks/query/use-paginated-conversations";
 
@@ -57,9 +61,58 @@ describe("useLatestRuntimeAcpModels", () => {
 
     expect(result.current).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
+    // Reading the cache must not even create the query.
     expect(
-      queryClient.getQueryState(paginatedConversationsQueryKey(20, "b1", null))
-        ?.fetchStatus,
-    ).toBe("idle");
+      queryClient.getQueryState(paginatedConversationsQueryKey(20, "b1", null)),
+    ).toBeUndefined();
+  });
+
+  it("does not hijack the sidebar query: its refetches still use the sidebar's queryFn", async () => {
+    // Regression: a second observer registered with ``enabled: false`` and no
+    // ``queryFn`` replaced the shared query's options, so the sidebar's next
+    // refetch failed with "No queryFn was passed".
+    const queryClient = new QueryClient();
+    const key = paginatedConversationsQueryKey(20, "b1", null);
+    const sidebarQueryFn = vi.fn(async () => ({
+      items: [
+        {
+          acp_server: "claude-code",
+          available_models: [{ model_id: "opus", name: "Opus 5.5" }],
+        },
+      ],
+      next_page_id: null,
+    }));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { result } = renderHook(
+      () => {
+        useInfiniteQuery({
+          queryKey: key,
+          queryFn: sidebarQueryFn,
+          initialPageParam: undefined as string | undefined,
+          getNextPageParam: () => undefined,
+        });
+        return useLatestRuntimeAcpModels("claude-code");
+      },
+      {
+        wrapper: ({ children }: { children: React.ReactNode }) => (
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        ),
+      },
+    );
+
+    await waitFor(() =>
+      expect(result.current).toEqual([{ model_id: "opus", name: "Opus 5.5" }]),
+    );
+    await queryClient.invalidateQueries({ queryKey: key });
+
+    expect(sidebarQueryFn).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryState(key)?.status).toBe("success");
+    expect(
+      errorSpy.mock.calls.some((args) => String(args[0]).includes("queryFn")),
+    ).toBe(false);
+    errorSpy.mockRestore();
   });
 });
