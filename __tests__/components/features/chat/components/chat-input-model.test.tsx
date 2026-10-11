@@ -259,6 +259,38 @@ describe("ChatInputModel", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a runtime model's description under its label", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "default",
+        available_models: [
+          {
+            model_id: "default",
+            name: "Default (recommended)",
+            description: "Opus 5.5",
+          },
+          { model_id: "haiku", name: "Haiku" },
+        ],
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    const row = screen.getByTestId("chat-input-acp-model-option-default");
+    expect(row).toHaveTextContent("Default (recommended)");
+    expect(
+      screen.getByTestId("chat-input-acp-model-description-default"),
+    ).toHaveTextContent("Opus 5.5");
+    expect(
+      screen.queryByTestId("chat-input-acp-model-description-haiku"),
+    ).not.toBeInTheDocument();
+  });
+
   it("live-switches the model when a row is selected in an active ACP conversation", () => {
     useActiveConversationMock.mockReturnValue({
       data: {

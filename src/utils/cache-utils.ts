@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { ActionEvent } from "#/types/agent-server/core/events/action-event";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useModelStore } from "#/stores/model-store";
 import { stripWorkspacePrefix } from "./path-utils";
 
@@ -57,5 +58,47 @@ export const handleActionEventCacheInvalidation = (
       queryKey: ["user", "conversation", conversationId],
     });
     useModelStore.getState().clearActiveProfile(conversationId);
+  }
+};
+
+/**
+ * Refresh the conversation when an ACP ``agent_state`` update carries model
+ * state the cached conversation doesn't have yet. The conversation is first
+ * fetched before the ACP session exists, so its ``available_models`` stays
+ * empty (and the picker on the static registry) until the next 30 s poll —
+ * which pauses in background tabs. Every prompt emits ``agent_state``, so
+ * only refetch on a real difference: a list the cache lacks, or a different
+ * current model.
+ */
+export const handleAcpAgentStateCacheRefresh = (
+  event: { key: string; value?: unknown },
+  conversationId: string,
+  queryClient: QueryClient,
+) => {
+  if (event.key !== "agent_state" || !event.value) return;
+  const state = event.value as {
+    acp_available_models?: unknown[] | null;
+    acp_current_model_id?: string | null;
+  };
+  const reportedModels = state.acp_available_models?.length ?? 0;
+  const reportedCurrent = state.acp_current_model_id ?? null;
+  if (!reportedModels && !reportedCurrent) return;
+
+  const isStale = queryClient
+    .getQueriesData<AppConversation | null>({
+      queryKey: ["user", "conversation", conversationId],
+    })
+    .some(([, cached]) => {
+      if (!cached) return false;
+      const cachedModels = cached.available_models?.length ?? 0;
+      return (
+        (reportedModels > 0 && cachedModels === 0) ||
+        (reportedCurrent !== null && cached.llm_model !== reportedCurrent)
+      );
+    });
+  if (isStale) {
+    queryClient.invalidateQueries({
+      queryKey: ["user", "conversation", conversationId],
+    });
   }
 };

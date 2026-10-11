@@ -43,6 +43,23 @@ vi.mock("#/hooks/query/use-active-acp-profile-detail", () => ({
   useActiveAcpProfileDetail: () => useActiveAcpProfileDetailMock(),
 }));
 
+// The home picker borrows the newest conversation's runtime model list from
+// the sidebar's conversations query; driven per test (no data by default).
+const usePaginatedConversationsMock = vi.fn();
+vi.mock("#/hooks/use-latest-runtime-acp-models", async () => {
+  const actual = await vi.importActual<
+    typeof import("#/hooks/use-latest-runtime-acp-models")
+  >("#/hooks/use-latest-runtime-acp-models");
+  return {
+    ...actual,
+    useLatestRuntimeAcpModels: (acpServerKey: string | null | undefined) =>
+      actual.pickLatestRuntimeAcpModels(
+        usePaginatedConversationsMock().data?.pages,
+        acpServerKey,
+      ),
+  };
+});
+
 const useCanManageOrgProfilesMock = vi.fn();
 vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
@@ -83,6 +100,133 @@ describe("useChatInputModelState", () => {
     useActiveAcpProfileDetailMock.mockReturnValue(null);
     useCanManageOrgProfilesMock.mockReset();
     useCanManageOrgProfilesMock.mockReturnValue(true);
+    usePaginatedConversationsMock.mockReset();
+    usePaginatedConversationsMock.mockReturnValue({ data: undefined });
+  });
+
+  const homeClaudeCode = () => {
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "opus",
+        },
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isHomeAcp: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+  };
+
+  it("active ACP: runtime rows carry the server's description", () => {
+    // Aliases like ``default`` / ``opus`` only say which model they are in
+    // ``description`` (e.g. "Opus 5 · Best for everyday, complex tasks").
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "default",
+        available_models: [
+          {
+            model_id: "default",
+            name: "Default (recommended)",
+            description: "Opus 5.5",
+          },
+          { model_id: "haiku", name: "Haiku", description: null },
+        ],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual([
+      {
+        id: "default",
+        label: "Default (recommended)",
+        description: "Opus 5.5",
+      },
+      { id: "haiku", label: "Haiku" },
+    ]);
+  });
+
+  it("home ACP: lists the newest same-provider conversation's runtime models", () => {
+    // No session on the home screen, so the last live list the provider
+    // reported is the best available truth; a newer conversation of another
+    // provider, or one whose session never reported a list, is skipped.
+    homeClaudeCode();
+    usePaginatedConversationsMock.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                acp_server: "codex",
+                available_models: [{ model_id: "gpt-5.6" }],
+              },
+              { acp_server: "claude-code", available_models: null },
+            ],
+          },
+          {
+            items: [
+              {
+                acp_server: "claude-code",
+                available_models: [
+                  {
+                    model_id: "opus",
+                    name: "Opus 5.5",
+                    description: "Complex work",
+                  },
+                  { model_id: "fable", name: "Fable 5.1" },
+                ],
+              },
+              {
+                acp_server: "claude-code",
+                available_models: [{ model_id: "older", name: "Older" }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "opus", label: "Opus 5.5", description: "Complex work" },
+      { id: "fable", label: "Fable 5.1" },
+    ]);
+    expect(result.current.displayModel).toBe("Opus 5.5");
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.switchConversationId).toBeNull();
+  });
+
+  it("home ACP: keeps the static catalogue when no conversation reported a runtime list", () => {
+    homeClaudeCode();
+    usePaginatedConversationsMock.mockReturnValue({
+      data: {
+        pages: [
+          { items: [{ acp_server: "claude-code", available_models: [] }] },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(
+      getAcpProvider("claude-code")?.available_models,
+    );
   });
 
   it("non-ACP: shows the conversation/settings llm_model with no picker", () => {
@@ -151,6 +295,143 @@ describe("useChatInputModelState", () => {
     // Live switch targets the navigation conversation id.
     expect(result.current.switchConversationId).toBe("c1");
     expect(result.current.destinationPath).toBe("/settings/agents");
+  });
+
+  it("active ACP: prefers the conversation's runtime available_models over the static catalogue (#18053)", () => {
+    // A ``custom`` ACP profile has no static registry entry, so the runtime
+    // catalogue the server reported at ``session/new`` (e.g. ``devin acp``)
+    // is the only model list the picker can show.
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "some-custom-server",
+        llm_model: "swe-2-high",
+        available_models: [
+          { model_id: "swe-2-high", name: "SWE 2 High" },
+          { model_id: "model-b", name: null },
+          { model_id: "model-c" },
+        ],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isActiveAcpConversation: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    // Rows: one per runtime entry, labelled by ``name`` with a ``model_id``
+    // fallback.
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "swe-2-high", label: "SWE 2 High" },
+      { id: "model-b", label: "model-b" },
+      { id: "model-c", label: "model-c" },
+    ]);
+    // A custom profile with a runtime list now shows the picker.
+    expect(result.current.showAcpPicker).toBe(true);
+    // Chip: the matching runtime entry's ``name``, not the raw id.
+    expect(result.current.displayModel).toBe("SWE 2 High");
+    expect(result.current.switchConversationId).toBe("c1");
+  });
+
+  it("active ACP: a runtime list wins over the static catalogue for built-in providers", () => {
+    // Runtime lists reflect the credentials actually configured (e.g.
+    // account-tier model availability), not the build-time snapshot.
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        available_models: [
+          { model_id: "sonnet", name: "Claude Sonnet" },
+          { model_id: "account-tier-model", name: "Account-tier model" },
+        ],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "sonnet", label: "Claude Sonnet" },
+      { id: "account-tier-model", label: "Account-tier model" },
+    ]);
+  });
+
+  it("active ACP: falls back to the static catalogue when the runtime list is empty", () => {
+    const provider = getAcpProvider("claude-code");
+    expect(provider?.available_models?.length).toBeGreaterThan(0);
+
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        available_models: [],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(
+      provider?.available_models,
+    );
+  });
+
+  it("active ACP: chip label falls back to the static label, then the raw id, when the runtime entry has no name", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        available_models: [{ model_id: "sonnet" }],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    // The row label has no runtime name to use, so it falls back to the id…
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "sonnet", label: "sonnet" },
+    ]);
+    // …while the chip prefers the static registry label.
+    expect(result.current.displayModel).toBe("Claude Sonnet");
+  });
+
+  it("active ACP: chip keeps the raw id for a nameless custom entry (there is no static label)", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "some-custom-server",
+        llm_model: "model-b",
+        available_models: [{ model_id: "model-b" }],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.displayModel).toBe("model-b");
   });
 
   it("home ACP: resolves the configured acp_model and exposes the picker, but no live-switch target", () => {

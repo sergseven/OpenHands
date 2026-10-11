@@ -7,7 +7,17 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { isAutomationsRoute } from "#/manifests/automation-interface";
 import { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
 
-export const usePaginatedConversations = (limit: number = 20) => {
+export const PAGINATED_CONVERSATIONS_DEFAULT_LIMIT = 20;
+
+export const paginatedConversationsQueryKey = (
+  limit: number,
+  backendId: string,
+  orgId: string | null | undefined,
+) => ["user", "conversations", "paginated", limit, backendId, orgId] as const;
+
+export const usePaginatedConversations = (
+  limit: number = PAGINATED_CONVERSATIONS_DEFAULT_LIMIT,
+) => {
   const { data: userIsAuthenticated } = useIsAuthed();
   const active = useActiveBackend();
   const { currentPath } = useNavigation();
@@ -20,14 +30,11 @@ export const usePaginatedConversations = (limit: number = 20) => {
     // maintains its own paginated cache. Switching backends naturally
     // produces a new query and a fresh fetch — without it the previous
     // backend's conversations stay visible for staleTime.
-    queryKey: [
-      "user",
-      "conversations",
-      "paginated",
+    queryKey: paginatedConversationsQueryKey(
       limit,
       active.backend.id,
       active.orgId,
-    ],
+    ),
     queryFn: async ({ pageParam }) => {
       const result = await AgentServerConversationService.searchConversations(
         limit,
