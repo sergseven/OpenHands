@@ -57,7 +57,10 @@ import type {
   ConversationErrorEvent,
   ServerErrorEvent,
 } from "#/types/agent-server/core/events/conversation-state-event";
-import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
+import {
+  handleAcpAgentStateCacheRefresh,
+  handleActionEventCacheInvalidation,
+} from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
 import { createSeqCursor, type SeqCursor } from "#/utils/session-seq-cursor";
 import type {
@@ -734,6 +737,14 @@ export function ConversationWebSocketProvider({
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
+            }
+            // loom-ide#1: refetch once the ACP session reports its models.
+            if (conversationId) {
+              handleAcpAgentStateCacheRefresh(
+                event,
+                conversationId,
+                queryClient,
+              );
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status

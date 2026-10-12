@@ -94,11 +94,22 @@ export function ChatInputModelMenuContent({
                   isSelected && "bg-interactive-hover",
                 )}
               >
-                <span
-                  className="flex-1 truncate text-sm leading-5"
-                  title={option.label}
-                >
-                  {option.label}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className="truncate text-sm leading-5"
+                    title={option.label}
+                  >
+                    {option.label}
+                  </span>
+                  {option.description && (
+                    <span
+                      className="truncate text-xs leading-4 text-text-dim"
+                      title={option.description}
+                      data-testid={`chat-input-acp-model-description-${option.id}`}
+                    >
+                      {option.description}
+                    </span>
+                  )}
                 </span>
                 {isSelected && (
                   <CheckIcon

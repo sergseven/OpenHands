@@ -118,6 +118,8 @@ export interface ACPModelOption {
   id: string;
   /** Human-readable label shown in Settings -> Agent. */
   label: string;
+  /** Server-supplied detail (runtime lists only), shown under the label. */
+  description?: string;
 }
 
 // Canvas-only UI metadata per built-in provider, keyed by the ACP registry
