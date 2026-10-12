@@ -1156,6 +1156,8 @@ describe("AgentServerConversationService", () => {
             },
             available_models: [
               { model_id: "swe-2-high", name: "SWE 2 High" },
+              { model_id: "padded", description: "  Opus 5.5  " },
+              { model_id: "blank", name: " ", description: "   " },
               { model_id: "  ", name: "dropped — blank id" },
               { name: "dropped — no id" },
               "dropped — not a record",
@@ -1183,6 +1185,8 @@ describe("AgentServerConversationService", () => {
 
       expect(withModels?.available_models).toEqual([
         { model_id: "swe-2-high", name: "SWE 2 High", description: null },
+        { model_id: "padded", name: null, description: "Opus 5.5" },
+        { model_id: "blank", name: null, description: null },
       ]);
       expect(emptyModels?.available_models).toBeNull();
     });

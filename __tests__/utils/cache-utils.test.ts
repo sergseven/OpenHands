@@ -144,6 +144,39 @@ describe("handleAcpAgentStateCacheRefresh", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("reads full_state snapshots from value.agent_state", () => {
+    const { queryClient, spy } = setup({
+      llm_model: "haiku",
+      available_models: null,
+    });
+
+    handleAcpAgentStateCacheRefresh(
+      {
+        key: "full_state",
+        value: {
+          agent_state: { acp_available_models: [{ model_id: "haiku" }] },
+        },
+      },
+      "conv-1",
+      queryClient,
+    );
+
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("refetches when nothing is cached yet (the first fetch may predate the session)", () => {
+    const queryClient = new QueryClient();
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+    const report = agentState({ acp_available_models: [{ model_id: "a" }] });
+
+    handleAcpAgentStateCacheRefresh(report, "conv-1", queryClient);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    queryClient.setQueryData(key, null);
+    handleAcpAgentStateCacheRefresh(report, "conv-1", queryClient);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores agent_state without ACP model fields (native agents)", () => {
     const { queryClient, spy } = setup({
       llm_model: "gpt-5",

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import {
@@ -9,9 +10,10 @@ import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { useActiveAcpProfileDetail } from "#/hooks/query/use-active-acp-profile-detail";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
-  toAcpModelOptions,
-  useLatestRuntimeAcpModels,
-} from "#/hooks/use-latest-runtime-acp-models";
+  acpRuntimeModelsIdentity,
+  loadAcpRuntimeModels,
+  saveAcpRuntimeModels,
+} from "#/utils/acp-runtime-models-store";
 import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
@@ -79,15 +81,29 @@ export function useChatInputModelState(): ChatInputModelState {
   // registry: it is the only source that lists models for a ``custom`` ACP
   // profile, and for built-in providers it reflects the credentials actually
   // configured. Only an active conversation has a live session to report it.
-  // Home has no session, so it borrows the newest same-provider
-  // conversation's list (loom-ide: models newer than the static registry).
-  const latestRuntimeAcpModels = useLatestRuntimeAcpModels(
-    isHomeAcp ? acpServerKey : null,
+  // Home has no session: it shows the list last remembered for this agent.
+  const activeRuntimeModels = conversation?.available_models;
+  const activeIdentity = acpRuntimeModelsIdentity(
+    conversation?.launched_agent_profile?.agent_profile_id,
+    conversation?.acp_server,
   );
+  useEffect(() => {
+    if (isActiveAcpConversation && activeRuntimeModels) {
+      saveAcpRuntimeModels(backend.id, activeIdentity, activeRuntimeModels);
+    }
+  }, [
+    isActiveAcpConversation,
+    backend.id,
+    activeIdentity,
+    activeRuntimeModels,
+  ]);
   const runtimeAcpModels = isActiveAcpConversation
-    ? (conversation?.available_models ?? [])
+    ? (activeRuntimeModels ?? [])
     : isHomeAcp
-      ? latestRuntimeAcpModels
+      ? loadAcpRuntimeModels(
+          backend.id,
+          acpRuntimeModelsIdentity(activeAcpProfile?.id, acpServerKey),
+        )
       : [];
 
   let currentModelId: string | null = null;
@@ -127,7 +143,11 @@ export function useChatInputModelState(): ChatInputModelState {
       : currentModelId;
   const availableAcpModels =
     runtimeAcpModels.length > 0
-      ? toAcpModelOptions(runtimeAcpModels)
+      ? runtimeAcpModels.map((model) => ({
+          id: model.model_id,
+          label: model.name ?? model.model_id,
+          ...(model.description ? { description: model.description } : {}),
+        }))
       : (acpProvider?.available_models ?? []);
   // A home-page pick persists into the active ACP profile, which on cloud is
   // org-owned — hide the selectable rows from members who'd only get a 403.

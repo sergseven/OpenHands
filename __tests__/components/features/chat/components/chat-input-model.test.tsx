@@ -34,6 +34,7 @@ import { ChatInputModel } from "#/components/features/chat/components/chat-input
 
 describe("ChatInputModel", () => {
   beforeEach(() => {
+    localStorage.clear();
     useActiveConversationMock.mockReset();
     useSettingsMock.mockReset();
     useSettingsMock.mockReturnValue({ data: undefined });

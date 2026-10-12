@@ -738,8 +738,7 @@ export function ConversationWebSocketProvider({
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
             }
-            // loom-ide: pick up the ACP session's live model list as soon as
-            // the session reports it (sergseven/loom-ide#1).
+            // loom-ide#1: refetch once the ACP session reports its models.
             if (conversationId) {
               handleAcpAgentStateCacheRefresh(
                 event,

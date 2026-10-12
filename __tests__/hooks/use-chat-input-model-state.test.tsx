@@ -43,23 +43,6 @@ vi.mock("#/hooks/query/use-active-acp-profile-detail", () => ({
   useActiveAcpProfileDetail: () => useActiveAcpProfileDetailMock(),
 }));
 
-// The home picker borrows the newest conversation's runtime model list from
-// the sidebar's conversations query; driven per test (no data by default).
-const usePaginatedConversationsMock = vi.fn();
-vi.mock("#/hooks/use-latest-runtime-acp-models", async () => {
-  const actual = await vi.importActual<
-    typeof import("#/hooks/use-latest-runtime-acp-models")
-  >("#/hooks/use-latest-runtime-acp-models");
-  return {
-    ...actual,
-    useLatestRuntimeAcpModels: (acpServerKey: string | null | undefined) =>
-      actual.pickLatestRuntimeAcpModels(
-        usePaginatedConversationsMock().data?.pages,
-        acpServerKey,
-      ),
-  };
-});
-
 const useCanManageOrgProfilesMock = vi.fn();
 vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
@@ -91,7 +74,9 @@ describe("useChatInputModelState", () => {
     useSettingsMock.mockReturnValue({ data: undefined });
     useActiveBackendMock.mockReset();
     // Default to a local backend — live ACP switching is local-only.
-    useActiveBackendMock.mockReturnValue({ backend: { kind: "local" } });
+    useActiveBackendMock.mockReturnValue({
+      backend: { id: "local-1", kind: "local" },
+    });
     useAcpModelContextMock.mockReset();
     useAcpModelContextMock.mockReturnValue(acpContext());
     useOptionalConversationIdMock.mockReset();
@@ -100,8 +85,7 @@ describe("useChatInputModelState", () => {
     useActiveAcpProfileDetailMock.mockReturnValue(null);
     useCanManageOrgProfilesMock.mockReset();
     useCanManageOrgProfilesMock.mockReturnValue(true);
-    usePaginatedConversationsMock.mockReset();
-    usePaginatedConversationsMock.mockReturnValue({ data: undefined });
+    localStorage.clear();
   });
 
   const homeClaudeCode = () => {
@@ -161,72 +145,111 @@ describe("useChatInputModelState", () => {
     ]);
   });
 
-  it("home ACP: lists the newest same-provider conversation's runtime models", () => {
-    // No session on the home screen, so the last live list the provider
-    // reported is the best available truth; a newer conversation of another
-    // provider, or one whose session never reported a list, is skipped.
-    homeClaudeCode();
-    usePaginatedConversationsMock.mockReturnValue({
+  const activeClaudeCode = (overrides: Record<string, unknown> = {}) => {
+    useActiveConversationMock.mockReturnValue({
       data: {
-        pages: [
-          {
-            items: [
-              {
-                acp_server: "codex",
-                available_models: [{ model_id: "gpt-5.6" }],
-              },
-              { acp_server: "claude-code", available_models: null },
-            ],
-          },
-          {
-            items: [
-              {
-                acp_server: "claude-code",
-                available_models: [
-                  {
-                    model_id: "opus",
-                    name: "Opus 5.5",
-                    description: "Complex work",
-                  },
-                  { model_id: "fable", name: "Fable 5.1" },
-                ],
-              },
-              {
-                acp_server: "claude-code",
-                available_models: [{ model_id: "older", name: "Older" }],
-              },
-            ],
-          },
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "opus",
+        available_models: [
+          { model_id: "opus", name: "Opus 5.5", description: "Complex work" },
+          { model_id: "fable", name: "Fable 5.1" },
         ],
+        ...overrides,
       },
     });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+  };
 
+  const runtimeOptions = [
+    { id: "opus", label: "Opus 5.5", description: "Complex work" },
+    { id: "fable", label: "Fable 5.1" },
+  ];
+
+  it("home ACP: lists the runtime models an earlier conversation of the same profile reported", () => {
+    activeClaudeCode({ launched_agent_profile: { agent_profile_id: "p1" } });
+    renderHook(() => useChatInputModelState());
+
+    homeClaudeCode();
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "p1",
+      acp_server: "claude-code",
+      acp_model: "opus",
+    });
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(result.current.availableAcpModels).toEqual([
-      { id: "opus", label: "Opus 5.5", description: "Complex work" },
-      { id: "fable", label: "Fable 5.1" },
-    ]);
+    expect(result.current.availableAcpModels).toEqual(runtimeOptions);
     expect(result.current.displayModel).toBe("Opus 5.5");
     expect(result.current.showAcpPicker).toBe(true);
     expect(result.current.switchConversationId).toBeNull();
   });
 
-  it("home ACP: keeps the static catalogue when no conversation reported a runtime list", () => {
-    homeClaudeCode();
-    usePaginatedConversationsMock.mockReturnValue({
-      data: {
-        pages: [
-          { items: [{ acp_server: "claude-code", available_models: [] }] },
-        ],
-      },
-    });
+  it("home ACP: a built-in provider without a profile id is keyed by its acp_server", () => {
+    activeClaudeCode();
+    renderHook(() => useChatInputModelState());
 
+    homeClaudeCode();
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(runtimeOptions);
+  });
+
+  it("home ACP: another profile's list is not shown (static catalogue instead)", () => {
+    activeClaudeCode({ launched_agent_profile: { agent_profile_id: "p1" } });
+    renderHook(() => useChatInputModelState());
+
+    homeClaudeCode();
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "p2",
+      acp_server: "claude-code",
+      acp_model: "opus",
+    });
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(result.current.availableAcpModels).toEqual(
       getAcpProvider("claude-code")?.available_models,
     );
+  });
+
+  it("a custom server without a profile id is neither saved nor read", () => {
+    activeClaudeCode({ acp_server: "custom" });
+    renderHook(() => useChatInputModelState());
+    expect(localStorage.length).toBe(0);
+
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: { agent_settings: { agent_kind: "acp", acp_server: "custom" } },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual([]);
+  });
+
+  it("an empty runtime list is not saved", () => {
+    activeClaudeCode({ available_models: [] });
+    renderHook(() => useChatInputModelState());
+
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("home ACP: malformed stored data is ignored", () => {
+    homeClaudeCode();
+    for (const stored of ["{not json", '{"model_id":"x"}', '[{"name":"x"}]']) {
+      localStorage.clear();
+      localStorage.setItem(`OH_ACP_RUNTIME_MODELS:local-1:claude-code`, stored);
+      const { result } = renderHook(() => useChatInputModelState());
+
+      expect(result.current.availableAcpModels).toEqual(
+        getAcpProvider("claude-code")?.available_models,
+      );
+    }
   });
 
   it("non-ACP: shows the conversation/settings llm_model with no picker", () => {

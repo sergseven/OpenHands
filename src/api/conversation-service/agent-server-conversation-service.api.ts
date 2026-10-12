@@ -255,11 +255,12 @@ function normalizeAvailableModels(
     const modelId = stringOrNull(entry.model_id)?.trim();
     if (!modelId) return [];
     const name = stringOrNull(entry.name)?.trim();
+    const description = stringOrNull(entry.description)?.trim();
     return [
       {
         model_id: modelId,
         name: name ? name : null,
-        description: stringOrNull(entry.description),
+        description: description ? description : null,
       },
     ];
   });
