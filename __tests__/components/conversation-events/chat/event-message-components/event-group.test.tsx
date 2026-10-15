@@ -15,6 +15,10 @@ import {
   FileEditorAction,
 } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
+import {
+  ACPToolCallEvent,
+  ACPToolCallStatus,
+} from "#/types/agent-server/core/events/acp-tool-call-event";
 
 const makeBashAction = (
   id: string,
@@ -92,6 +96,25 @@ const makeAgentErrorEvent = (
   tool_name: "execute_bash",
   tool_call_id: `call_${actionId}`,
   error: "boom",
+});
+
+const makeACPToolCall = (
+  id: string,
+  status: ACPToolCallStatus,
+  command: string,
+): ACPToolCallEvent => ({
+  id,
+  kind: "ACPToolCallEvent",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  tool_call_id: `tc_${id}`,
+  title: command,
+  status,
+  tool_kind: "execute",
+  raw_input: { command },
+  raw_output: null,
+  content: null,
+  is_error: false,
 });
 
 describe("EventGroup", () => {
@@ -258,6 +281,67 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
     expect(
       screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["pending", "in_progress", null] as const)(
+    "counts an ACP tool call with status %s as running",
+    (status) => {
+      const events = [
+        makeACPToolCall("c1", "completed", "ls"),
+        makeACPToolCall("c2", status as ACPToolCallStatus, "pwd"),
+      ];
+
+      renderWithProviders(
+        <EventGroup events={events}>
+          <div>child</div>
+        </EventGroup>,
+      );
+
+      expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+      expect(
+        screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
+      ).toBeInTheDocument();
+      // The live title is the latest ACP call's own title.
+      expect(screen.getByText(/ACTION_MESSAGE\$ACP_RUN/)).toBeInTheDocument();
+    },
+  );
+
+  it("counts completed and failed ACP tool calls as done", () => {
+    const events = [
+      makeACPToolCall("c1", "completed", "ls"),
+      makeACPToolCall("c2", "failed", "pwd"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ACTION_MESSAGE\$ACP_RUN/)).toBeInTheDocument();
+  });
+
+  it("counts parallel pending ACP calls alongside native observations", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeACPToolCall("c1", "pending", "pwd"),
+      makeACPToolCall("c2", "pending", "whoami"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
     ).toBeInTheDocument();
   });
 

@@ -5,6 +5,7 @@ import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
+  isACPToolCallEvent,
   isActionEvent,
   isAgentErrorEvent,
   isObservationEvent,
@@ -12,6 +13,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
+import { isACPToolCallPending } from "../event-content-helpers/get-observation-result";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
 
@@ -78,7 +80,8 @@ export function EventGroup({
   // resolved action. An ActionEvent that's still here (i.e. not yet replaced
   // in the UI events array) is an action currently in flight, unless an
   // AgentErrorEvent resolved it: that event carries no action id and renders
-  // on its own, so it never replaces the action it answers.
+  // on its own, so it never replaces the action it answers. An ACP tool call
+  // is a single event that is in flight until its status is terminal.
   const lookupSource = allEvents ?? events;
   const unreplacedActions = events.filter(isActionEvent);
   const erroredToolCallIds =
@@ -90,9 +93,13 @@ export function EventGroup({
   const pendingActions = unreplacedActions.filter(
     (action) => !erroredToolCallIds?.has(action.tool_call_id),
   );
+  const pendingCount =
+    pendingActions.length +
+    events.filter((e) => isACPToolCallEvent(e) && isACPToolCallPending(e))
+      .length;
   const totalCount = events.length;
-  const completedCount = totalCount - pendingActions.length;
-  const isRunning = pendingActions.length > 0;
+  const completedCount = totalCount - pendingCount;
+  const isRunning = pendingCount > 0;
 
   // Title of the most recent groupable event. While running this is the
   // pending action; otherwise it's the latest observation (or rejection), with
@@ -101,7 +108,7 @@ export function EventGroup({
   const latestEvent = events[events.length - 1];
   let latestTitle: React.ReactNode = null;
   if (latestEvent) {
-    if (isActionEvent(latestEvent)) {
+    if (isActionEvent(latestEvent) || isACPToolCallEvent(latestEvent)) {
       latestTitle = getEventContent(latestEvent).title;
     } else if (
       isObservationEvent(latestEvent) ||

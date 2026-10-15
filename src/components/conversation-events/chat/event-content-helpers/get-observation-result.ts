@@ -4,6 +4,14 @@ import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call
 export type ObservationResultStatus = "success" | "error" | "timeout";
 
 /**
+ * True while an ACPToolCallEvent has not reached a terminal status
+ * (``completed`` / ``failed``): the ACP counterpart of an ActionEvent whose
+ * ObservationEvent hasn't arrived yet.
+ */
+export const isACPToolCallPending = (event: ACPToolCallEvent): boolean =>
+  event.status !== "completed" && event.status !== "failed";
+
+/**
  * Map an ACPToolCallEvent's lifecycle + error flags to the same
  * success/error status the rest of the UI uses. A non-terminal call
  * (``pending`` / ``in_progress``) falls through to ``undefined`` so the

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getACPToolCallResult,
   getObservationResult,
+  isACPToolCallPending,
 } from "#/components/conversation-events/chat/event-content-helpers/get-observation-result";
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { ObservationEvent } from "#/types/agent-server/core";
@@ -22,6 +23,22 @@ const makeACPEvent = (
   content: null,
   is_error: false,
   ...overrides,
+});
+
+describe("isACPToolCallPending", () => {
+  it.each(["pending", "in_progress", null] as const)(
+    "is pending for status %s",
+    (status) => {
+      expect(isACPToolCallPending(makeACPEvent({ status }))).toBe(true);
+    },
+  );
+
+  it.each(["completed", "failed"] as const)(
+    "is not pending for terminal status %s",
+    (status) => {
+      expect(isACPToolCallPending(makeACPEvent({ status }))).toBe(false);
+    },
+  );
 });
 
 describe("getACPToolCallResult", () => {

@@ -1,5 +1,6 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
+  isACPToolCallEvent,
   isActionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
@@ -49,6 +50,12 @@ export const isGroupableEvent = (
       return false;
     }
     return true;
+  }
+
+  // An ACP tool call is an action and its observation in one event. Its
+  // "think" kind breaks the run, mirroring ThinkAction.
+  if (isACPToolCallEvent(event)) {
+    return event.tool_kind !== "think";
   }
 
   // A rejected action stays wherever the action itself was: in its run, or
