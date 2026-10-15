@@ -4,6 +4,7 @@ import {
   HookType,
 } from "@openhands/typescript-client";
 import type {
+  ACPCommandInfo,
   ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
@@ -131,6 +132,7 @@ export interface DirectConversationInfo {
   current_model_id?: string | null;
   current_model_name?: string | null;
   available_models?: ACPModelInfo[] | null;
+  available_commands?: ACPCommandInfo[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -446,6 +448,7 @@ export function toAppConversation(
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
       : null,
+    acp_available_commands: isAcp ? (info.available_commands ?? []) : null,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model

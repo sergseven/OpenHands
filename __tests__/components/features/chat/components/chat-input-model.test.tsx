@@ -36,8 +36,8 @@ vi.mock("#/hooks/query/use-acp-session-models", () => ({
   useAcpSessionModels: () => sessionModelsMock(),
 }));
 const discoveryMock = vi.fn();
-vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: () => discoveryMock(),
+vi.mock("#/hooks/query/use-acp-discovery", () => ({
+  useAcpDiscovery: () => discoveryMock(),
 }));
 
 const CLAUDE_MODELS = [

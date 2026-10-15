@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
+import { HomeWorkingDirContext } from "#/contexts/home-working-dir-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
@@ -301,16 +302,20 @@ export function HomeChatLauncher() {
         </div>
 
         <div className="w-full">
-          <CustomChatInput
-            onSubmit={handleSubmitWithModelGuard}
-            onFilesPaste={handleUpload}
-            disabled={isCreating || llmBlocked}
-            placeholder={
-              isAutomateMode
-                ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
-                : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
-            }
-          />
+          <HomeWorkingDirContext.Provider
+            value={pendingWorkspace?.path ?? null}
+          >
+            <CustomChatInput
+              onSubmit={handleSubmitWithModelGuard}
+              onFilesPaste={handleUpload}
+              disabled={isCreating || llmBlocked}
+              placeholder={
+                isAutomateMode
+                  ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
+                  : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+              }
+            />
+          </HomeWorkingDirContext.Provider>
         </div>
 
         {isolated && (

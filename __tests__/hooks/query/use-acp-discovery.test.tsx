@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useAcpDiscovery } from "#/hooks/query/use-acp-discovery";
 import {
   acpModelScope,
   readRememberedAcpModels,
@@ -27,10 +27,10 @@ vi.mock("#/hooks/query/use-get-secrets", () => ({
   }),
 }));
 
-const discoverModels = vi.hoisted(() => vi.fn());
+const discover = vi.hoisted(() => vi.fn());
 vi.mock("#/api/acp-service/acp-service.api", () => ({
   default: {
-    discoverModels: (...args: unknown[]) => discoverModels(...args),
+    discover: (...args: unknown[]) => discover(...args),
   },
 }));
 
@@ -71,21 +71,48 @@ beforeEach(() => {
   };
 });
 
-describe("useAcpModelDiscovery", () => {
-  it("asks the local agent-server with every saved secret", async () => {
-    discoverModels.mockResolvedValue(PI_DISCOVERY);
+describe("useAcpDiscovery", () => {
+  it("lists the commands the agent offers in the working dir", async () => {
+    const commands = [
+      {
+        name: "backlog-show",
+        description: "Show the backlog",
+        input_hint: null,
+      },
+    ];
+    discover.mockResolvedValue({
+      ...PI_DISCOVERY,
+      available_commands: commands,
+    });
 
-    const { result } = renderHook(() => useAcpModelDiscovery("pi"), {
+    const { result } = renderHook(
+      () => useAcpDiscovery("pi", { workingDir: "/work/repo" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.commands).toEqual(commands));
+    expect(discover).toHaveBeenCalledWith(
+      "pi",
+      ["ANTHROPIC_API_KEY", "PI_AUTH_JSON"],
+      "/work/repo",
+    );
+  });
+
+  it("asks the local agent-server with every saved secret", async () => {
+    discover.mockResolvedValue(PI_DISCOVERY);
+
+    const { result } = renderHook(() => useAcpDiscovery("pi"), {
       wrapper,
     });
 
     await waitFor(() =>
       expect(result.current.defaultModelId).toBe("anthropic/claude-opus-4-8"),
     );
-    expect(discoverModels).toHaveBeenCalledWith("pi", [
-      "ANTHROPIC_API_KEY",
-      "PI_AUTH_JSON",
-    ]);
+    expect(discover).toHaveBeenCalledWith(
+      "pi",
+      ["ANTHROPIC_API_KEY", "PI_AUTH_JSON"],
+      null,
+    );
     const models = [
       { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
       { id: "anthropic/claude-sonnet-5", label: "anthropic/claude-sonnet-5" },
@@ -96,37 +123,36 @@ describe("useAcpModelDiscovery", () => {
   });
 
   it("asks with only the secrets the launch would receive", async () => {
-    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    discover.mockResolvedValue(PI_DISCOVERY);
 
     renderHook(
-      () =>
-        useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON", "GONE"] }),
+      () => useAcpDiscovery("pi", { secretRefs: ["PI_AUTH_JSON", "GONE"] }),
       { wrapper },
     );
 
     await waitFor(() =>
-      expect(discoverModels).toHaveBeenCalledWith("pi", ["PI_AUTH_JSON"]),
+      expect(discover).toHaveBeenCalledWith("pi", ["PI_AUTH_JSON"], null),
     );
   });
 
   it("sends no secrets when the profile allows none", async () => {
-    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    discover.mockResolvedValue(PI_DISCOVERY);
 
-    renderHook(() => useAcpModelDiscovery("pi", { secretRefs: [] }), {
+    renderHook(() => useAcpDiscovery("pi", { secretRefs: [] }), {
       wrapper,
     });
 
-    await waitFor(() => expect(discoverModels).toHaveBeenCalledWith("pi", []));
+    await waitFor(() => expect(discover).toHaveBeenCalledWith("pi", [], null));
   });
 
   it("does not offer a list remembered with other secrets", async () => {
     rememberAcpModels("local-1", "pi", ALL, [
       { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
     ]);
-    discoverModels.mockResolvedValue(AUTH_REQUIRED);
+    discover.mockResolvedValue(AUTH_REQUIRED);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: [] }),
+      () => useAcpDiscovery("pi", { secretRefs: [] }),
       { wrapper },
     );
 
@@ -140,10 +166,10 @@ describe("useAcpModelDiscovery", () => {
   it("offers the list remembered with the same secrets", async () => {
     const models = [{ id: "anthropic/claude-sonnet-5", label: "Sonnet 5" }];
     rememberAcpModels("local-1", "pi", acpModelScope(["PI_AUTH_JSON"]), models);
-    discoverModels.mockResolvedValue(AUTH_REQUIRED);
+    discover.mockResolvedValue(AUTH_REQUIRED);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      () => useAcpDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
       { wrapper },
     );
 
@@ -157,10 +183,10 @@ describe("useAcpModelDiscovery", () => {
   it("remembers a scoped lookup without replacing the unscoped list", async () => {
     const unscoped = [{ id: "openai/gpt-6-astra", label: "GPT-6 Astra" }];
     rememberAcpModels("local-1", "pi", ALL, unscoped);
-    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    discover.mockResolvedValue(PI_DISCOVERY);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      () => useAcpDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
       { wrapper },
     );
 
@@ -172,10 +198,10 @@ describe("useAcpModelDiscovery", () => {
   });
 
   it("offers nothing while disabled, even a lookup it already made", async () => {
-    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    discover.mockResolvedValue(PI_DISCOVERY);
 
     const { result, rerender } = renderHook(
-      ({ enabled }) => useAcpModelDiscovery("pi", { enabled }),
+      ({ enabled }) => useAcpDiscovery("pi", { enabled }),
       { wrapper, initialProps: { enabled: true } },
     );
     await waitFor(() => expect(result.current.source).toBe("live"));
@@ -188,13 +214,13 @@ describe("useAcpModelDiscovery", () => {
   });
 
   it("has no models when the server cannot answer and none were seen", async () => {
-    discoverModels.mockRejectedValue(new Error("404"));
+    discover.mockRejectedValue(new Error("404"));
 
-    const { result } = renderHook(() => useAcpModelDiscovery("pi"), {
+    const { result } = renderHook(() => useAcpDiscovery("pi"), {
       wrapper,
     });
 
-    await waitFor(() => expect(discoverModels).toHaveBeenCalled());
+    await waitFor(() => expect(discover).toHaveBeenCalled());
     await waitFor(() => expect(result.current.isDiscovering).toBe(false));
     expect(result.current.discovery).toBeNull();
     expect(result.current.models).toEqual([]);
@@ -207,11 +233,11 @@ describe("useAcpModelDiscovery", () => {
       orgId: null,
     };
 
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpDiscovery("claude-code"), {
       wrapper,
     });
 
-    expect(discoverModels).not.toHaveBeenCalled();
+    expect(discover).not.toHaveBeenCalled();
     expect(result.current.models).toEqual([]);
     expect(result.current.source).toBe("none");
   });
@@ -227,7 +253,7 @@ describe("useAcpModelDiscovery", () => {
       { id: "gpt-5.5", label: "GPT" },
     ]);
 
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpDiscovery("claude-code"), {
       wrapper,
     });
 
@@ -241,7 +267,7 @@ describe("useAcpModelDiscovery", () => {
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
     };
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpDiscovery("claude-code"), {
       wrapper,
     });
     expect(result.current.models).toEqual([]);
@@ -254,8 +280,8 @@ describe("useAcpModelDiscovery", () => {
   });
 
   it("does not ask without a provider", () => {
-    renderHook(() => useAcpModelDiscovery(null), { wrapper });
+    renderHook(() => useAcpDiscovery(null), { wrapper });
 
-    expect(discoverModels).not.toHaveBeenCalled();
+    expect(discover).not.toHaveBeenCalled();
   });
 });

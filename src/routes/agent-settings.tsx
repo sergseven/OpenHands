@@ -34,7 +34,7 @@ import {
   type ACPModelOption,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
-import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useAcpDiscovery } from "#/hooks/query/use-acp-discovery";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
@@ -733,7 +733,7 @@ export function AgentSettingsScreen({
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
-  const liveModels = useAcpModelDiscovery(
+  const liveModels = useAcpDiscovery(
     isAcp && isDefaultProviderCommand ? selectedPreset : null,
     {
       secretRefs:

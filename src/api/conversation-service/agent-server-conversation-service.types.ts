@@ -3,6 +3,7 @@ import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPCommandInfo } from "@openhands/typescript-client";
 import type { ACPModelOption } from "#/constants/acp-providers";
 
 /**
@@ -184,6 +185,11 @@ export interface AppConversation {
    * Empty before the session starts and on servers that don't report models.
    */
   acp_available_models?: ACPModelOption[] | null;
+  /**
+   * Slash commands the conversation's ACP session advertised (its latest
+   * update). Empty before the session starts; null for non-ACP agents.
+   */
+  acp_available_commands?: ACPCommandInfo[] | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via

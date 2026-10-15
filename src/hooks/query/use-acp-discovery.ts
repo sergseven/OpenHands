@@ -1,10 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ACPModelDiscovery } from "@openhands/typescript-client";
+import type {
+  ACPCommandInfo,
+  ACPDiscovery,
+} from "@openhands/typescript-client";
 import AcpService from "#/api/acp-service/acp-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
-import { ACP_MODEL_DISCOVERY_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { ACP_DISCOVERY_QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
   toAcpModelOptions,
   type ACPModelOption,
@@ -15,35 +18,44 @@ import {
   rememberAcpModels,
 } from "#/utils/remembered-acp-models";
 
+const NO_COMMANDS: ACPCommandInfo[] = [];
+
 async function discover(
   providerKey: string,
   secretNames: string[],
-): Promise<ACPModelDiscovery | null> {
+  workingDir: string | null,
+): Promise<ACPDiscovery | null> {
   try {
-    return await AcpService.discoverModels(providerKey, secretNames);
+    return await AcpService.discover(providerKey, secretNames, workingDir);
   } catch {
     // Older agent-servers lack the endpoint.
     return null;
   }
 }
 
-/** Where {@link useAcpModelDiscovery}'s ``models`` came from. */
+/** Where {@link useAcpDiscovery}'s ``models`` came from. */
 export type AcpModelSource = "live" | "remembered" | "none";
 
 /**
- * The models a built-in ACP provider offers on the active backend, and the one
- * it uses by default, as its own server reports them for the saved
- * credentials. Only local backends can ask before a conversation starts;
+ * What a built-in ACP provider offers on the active backend, as its own server
+ * reports it for the saved credentials: its models, the one it uses by
+ * default, and the slash commands it lists in ``workingDir`` (null: none of
+ * the project's). Only local backends can ask before a conversation starts;
  * otherwise ``models`` is the list the agent last reported with the same
- * secrets. ``secretRefs`` limits the lookup to the secrets a launch would
- * receive; null means every saved secret.
+ * secrets and ``commands`` is empty. ``secretRefs`` limits the lookup to the
+ * secrets a launch would receive; null means every saved secret.
  */
-export function useAcpModelDiscovery(
+export function useAcpDiscovery(
   providerKey: string | null | undefined,
   {
     enabled = true,
     secretRefs = null,
-  }: { enabled?: boolean; secretRefs?: readonly string[] | null } = {},
+    workingDir = null,
+  }: {
+    enabled?: boolean;
+    secretRefs?: readonly string[] | null;
+    workingDir?: string | null;
+  } = {},
 ) {
   const { backend } = useActiveBackend();
   const isLocal = backend.kind === "local";
@@ -55,14 +67,15 @@ export function useAcpModelDiscovery(
   const queryEnabled =
     enabled && isLocal && !!providerKey && !secrets.isLoading;
 
-  const query = useQuery<ACPModelDiscovery | null, Error>({
+  const query = useQuery<ACPDiscovery | null, Error>({
     queryKey: [
-      ...ACP_MODEL_DISCOVERY_QUERY_KEYS.all,
+      ...ACP_DISCOVERY_QUERY_KEYS.all,
       backend.id,
       providerKey,
       secretNames,
+      workingDir,
     ],
-    queryFn: () => discover(providerKey as string, secretNames),
+    queryFn: () => discover(providerKey as string, secretNames, workingDir),
     enabled: queryEnabled,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
@@ -101,6 +114,7 @@ export function useAcpModelDiscovery(
     models,
     source,
     defaultModelId: discovery?.current_model_id ?? null,
+    commands: discovery?.available_commands ?? NO_COMMANDS,
     isDiscovering: queryEnabled && query.isFetching && !query.data,
   };
 }

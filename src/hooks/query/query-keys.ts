@@ -26,8 +26,8 @@ export const META_PROFILES_QUERY_KEYS = {
   all: ["meta-profiles"] as const,
 } as const;
 
-export const ACP_MODEL_DISCOVERY_QUERY_KEYS = {
-  all: ["acp-model-discovery"] as const,
+export const ACP_DISCOVERY_QUERY_KEYS = {
+  all: ["acp-discovery"] as const,
 } as const;
 
 export const AGENT_PROFILES_QUERY_KEYS = {

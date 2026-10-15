@@ -54,6 +54,16 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => mockConversation,
 }));
 
+const mockAcpCommands = vi.hoisted(() => ({
+  current: null as
+    | { name: string; description: string; input_hint: string | null }[]
+    | null,
+}));
+
+vi.mock("#/hooks/chat/use-acp-slash-commands", () => ({
+  useAcpSlashCommands: () => mockAcpCommands.current,
+}));
+
 function makeSkill(
   name: string,
   triggers: string[] = [],
@@ -139,6 +149,7 @@ describe("useSlashCommand", () => {
     mockLlmProfiles.data = undefined;
     mockLlmProfiles.isLoading = false;
     mockConversation.data = undefined;
+    mockAcpCommands.current = null;
     document.body.innerHTML = "";
     window.localStorage.clear?.();
     __resetActiveStoreForTests();
@@ -309,6 +320,61 @@ describe("useSlashCommand", () => {
       "/derived",
       "/missing-triggers",
       "/reference",
+    ]);
+  });
+
+  it("lists an ACP agent's own commands instead of skills, built-ins first", () => {
+    mockSkills.data = [makeSkill("folder-skill", ["/folder-skill"])];
+    mockAcpCommands.current = [
+      {
+        name: "backlog-show",
+        description: "Show the backlog",
+        input_hint: null,
+      },
+      { name: "compact", description: "Compact", input_hint: "<why>" },
+      { name: "goal", description: "Claude's own goal", input_hint: null },
+    ];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    const items = result.current.filteredItems;
+    expect(items.map((item) => item.command)).toEqual([
+      "/btw",
+      "/model",
+      "/goal",
+      "/plan",
+      "/code",
+      "/backlog-show",
+      "/compact",
+    ]);
+    expect(
+      items.find((item) => item.command === "/goal")?.skill.content,
+    ).toMatch(/judge/);
+    expect(
+      items.find((item) => item.command === "/compact")?.argumentHint,
+    ).toBe("<why>");
+  });
+
+  it("filters ACP commands by their description", () => {
+    mockAcpCommands.current = [
+      {
+        name: "backlog-show",
+        description: "Lists open issues",
+        input_hint: null,
+      },
+      { name: "compact", description: "Compact", input_hint: null },
+    ];
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => {
+      setInputText(ref.current, "/issues");
+      result.current.updateSlashMenu();
+    });
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/backlog-show",
     ]);
   });
 
