@@ -14,6 +14,11 @@ import {
 } from "#/types/agent-server/core";
 import { TextContent } from "#/types/agent-server/core/base/common";
 import {
+  ACPToolCallEvent,
+  ACPToolCallStatus,
+  ACPToolKind,
+} from "#/types/agent-server/core/events/acp-tool-call-event";
+import {
   ExecuteBashAction,
   FileEditorAction,
   FinishAction,
@@ -202,6 +207,25 @@ const makeHookExecutionEvent = (id: string): HookExecutionEvent => ({
   hook_input: null,
 });
 
+const makeACPToolCall = (
+  id: string,
+  status: ACPToolCallStatus = "completed",
+  toolKind: ACPToolKind = "execute",
+): ACPToolCallEvent => ({
+  id,
+  kind: "ACPToolCallEvent",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  tool_call_id: `tc_${id}`,
+  title: `echo ${id}`,
+  status,
+  tool_kind: toolKind,
+  raw_input: { command: `echo ${id}` },
+  raw_output: null,
+  content: null,
+  is_error: false,
+});
+
 describe("isGroupableEvent", () => {
   it("groups regular action events", () => {
     expect(isGroupableEvent(makeBashAction("a1"))).toBe(true);
@@ -265,6 +289,19 @@ describe("isGroupableEvent", () => {
 
   it("does not group AgentErrorEvent", () => {
     expect(isGroupableEvent(makeAgentErrorEvent("e1"))).toBe(false);
+  });
+
+  it.each(["pending", "in_progress", "completed", "failed"] as const)(
+    "groups an ACP tool call with status %s",
+    (status) => {
+      expect(isGroupableEvent(makeACPToolCall("c1", status))).toBe(true);
+    },
+  );
+
+  it("does not group an ACP think tool call", () => {
+    expect(
+      isGroupableEvent(makeACPToolCall("c1", "completed", "think")),
+    ).toBe(false);
   });
 
   it("does not group HookExecutionEvent", () => {
@@ -536,6 +573,64 @@ describe("groupEvents", () => {
     // additional "thought" item should be emitted for it because the
     // ThinkAction's body already renders the thought.
     expect(result.map((item) => item.kind)).toEqual([
+      "group",
+      "single",
+      "group",
+    ]);
+  });
+
+  it("groups consecutive ACP tool calls", () => {
+    const events = [
+      makeUserMessage("m1"),
+      makeACPToolCall("c1"),
+      makeACPToolCall("c2", "in_progress"),
+      makeACPToolCall("c3", "pending"),
+    ];
+
+    const result = groupEvents(events);
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({ kind: "group", startIndex: 1 });
+    if (result[1].kind === "group") {
+      expect(result[1].events).toHaveLength(3);
+    }
+  });
+
+  it("keeps a lone ACP tool call single", () => {
+    const events = [
+      makeUserMessage("m1"),
+      makeACPToolCall("c1"),
+      makeUserMessage("m2"),
+    ];
+
+    expect(groupEvents(events).map((item) => item.kind)).toEqual([
+      "single",
+      "single",
+      "single",
+    ]);
+  });
+
+  it("groups a mixed run of native and ACP tool calls", () => {
+    const events = [
+      makeBashObservation("o1", "a1"),
+      makeACPToolCall("c1"),
+      makeBashAction("a2"),
+    ];
+
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: "group", startIndex: 0 });
+  });
+
+  it("breaks an ACP run at an ACP think tool call", () => {
+    const events = [
+      makeACPToolCall("c1"),
+      makeACPToolCall("c2"),
+      makeACPToolCall("t1", "completed", "think"),
+      makeACPToolCall("c3"),
+      makeACPToolCall("c4"),
+    ];
+
+    expect(groupEvents(events).map((item) => item.kind)).toEqual([
       "group",
       "single",
       "group",
