@@ -132,13 +132,18 @@ export const useSlashCommand = (
       completionKind === "model-profile" ? modelProfileItems : slashItems;
     if (!filterText) return sourceItems;
     const lower = filterText.toLowerCase();
-    return sourceItems.filter(
-      (item) =>
-        item.command.toLowerCase().includes(lower) ||
-        item.skill.name.toLowerCase().includes(lower) ||
-        item.skill.description?.toLowerCase().includes(lower) ||
-        item.skill.content?.toLowerCase().includes(lower),
-    );
+    const nameMatches = (item: SlashCommandItem) =>
+      item.command.toLowerCase().includes(lower) ||
+      item.skill.name.toLowerCase().includes(lower);
+    const textMatches = (item: SlashCommandItem) =>
+      item.skill.description?.toLowerCase().includes(lower) ||
+      item.skill.content?.toLowerCase().includes(lower);
+    // Name matches first, so "/comp" puts /compact above commands that only
+    // mention "complete" in their description.
+    return [
+      ...sourceItems.filter(nameMatches),
+      ...sourceItems.filter((item) => !nameMatches(item) && textMatches(item)),
+    ];
   }, [completionKind, modelProfileItems, slashItems, filterText]);
 
   // Keep refs in sync so handleSlashKeyDown always reads the latest values,

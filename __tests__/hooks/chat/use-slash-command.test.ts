@@ -356,6 +356,29 @@ describe("useSlashCommand", () => {
     ).toBe("<why>");
   });
 
+  it("ranks ACP name matches above description matches", () => {
+    mockAcpCommands.current = [
+      {
+        name: "verify",
+        description: "Use when completing work",
+        input_hint: null,
+      },
+      { name: "compact", description: "Free up context", input_hint: null },
+    ];
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => {
+      setInputText(ref.current, "/comp");
+      result.current.updateSlashMenu();
+    });
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/compact",
+      "/verify",
+    ]);
+  });
+
   it("filters ACP commands by their description", () => {
     mockAcpCommands.current = [
       {
