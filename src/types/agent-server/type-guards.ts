@@ -34,6 +34,7 @@ import {
   ConversationStateUpdateEventFullState,
   ConversationStateUpdateEventStats,
   ConversationStateUpdateEventGoal,
+  ConversationStateUpdateEventAgentState,
   ConversationErrorEvent,
   ServerErrorEvent,
 } from "./core/events/conversation-state-event";
@@ -267,6 +268,11 @@ export const isStatsConversationStateUpdateEvent = (
 export const isGoalConversationStateUpdateEvent = (
   event: ConversationStateUpdateEvent,
 ): event is ConversationStateUpdateEventGoal => event.key === "goal";
+
+export const isAgentStateConversationStateUpdateEvent = (
+  event: ConversationStateUpdateEvent,
+): event is ConversationStateUpdateEventAgentState =>
+  event.key === "agent_state";
 
 /**
  * Type guard function to check if an event is a conversation error event

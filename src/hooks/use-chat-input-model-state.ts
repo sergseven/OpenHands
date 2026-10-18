@@ -9,8 +9,9 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { useActiveAcpProfileDetail } from "#/hooks/query/use-active-acp-profile-detail";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useAcpDiscovery } from "#/hooks/query/use-acp-discovery";
 import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
+import { useAcpWorkingDir } from "#/hooks/use-acp-working-dir";
 import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
@@ -55,6 +56,7 @@ export function useChatInputModelState(): ChatInputModelState {
     destinationPath,
     destinationLabel,
   } = useAcpModelContext();
+  const acpWorkingDir = useAcpWorkingDir();
 
   const settingsAcpServerKey =
     typeof settings?.agent_settings?.acp_server === "string"
@@ -68,8 +70,9 @@ export function useChatInputModelState(): ChatInputModelState {
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
   // The agent's models depend on the secrets it may use: the ones the
   // conversation launched with, or the next launch's from the active profile.
-  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null, {
+  const discovered = useAcpDiscovery(acpProvider ? acpServerKey : null, {
     enabled: isActiveAcpConversation || !!activeAcpProfile,
+    workingDir: acpWorkingDir,
     secretRefs:
       (isActiveAcpConversation
         ? conversation?.launched_agent_profile?.secret_refs

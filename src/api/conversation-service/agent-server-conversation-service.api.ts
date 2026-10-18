@@ -1,4 +1,5 @@
 import {
+  type ACPCommandInfo,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -124,6 +125,20 @@ function normalizeAcpModels(value: unknown): ACPModelInfo[] {
         model_id: entry.model_id,
         name: stringOrNull(entry.name),
         description: stringOrNull(entry.description),
+      },
+    ];
+  });
+}
+
+function normalizeAcpCommands(value: unknown): ACPCommandInfo[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.name !== "string") return [];
+    return [
+      {
+        name: entry.name,
+        description: stringOrNull(entry.description) ?? "",
+        input_hint: stringOrNull(entry.input_hint),
       },
     ];
   });
@@ -346,6 +361,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    available_commands: normalizeAcpCommands(item.available_commands),
   };
 }
 

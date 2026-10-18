@@ -1,8 +1,5 @@
 import { ACPClient, BashClient } from "@openhands/typescript-client/clients";
-import type {
-  ACPModelDiscovery,
-  BashOutput,
-} from "@openhands/typescript-client";
+import type { ACPDiscovery, BashOutput } from "@openhands/typescript-client";
 import { buildCustomSecrets } from "../agent-server-adapter";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
@@ -118,17 +115,20 @@ class AcpService {
   }
 
   /**
-   * Ask the (local) agent-server which models ``server`` offers and which one
-   * it picks by default, given the saved secrets named in ``secretNames``.
+   * Ask the (local) agent-server which models ``server`` offers, which one
+   * it picks by default and which slash commands it lists in ``workingDir``,
+   * given the saved secrets named in ``secretNames``.
    */
-  static async discoverModels(
+  static async discover(
     server: string,
     secretNames: readonly string[],
-  ): Promise<ACPModelDiscovery> {
+    workingDir: string | null = null,
+  ): Promise<ACPDiscovery> {
     const { host, apiKey } = getAgentServerClientOptions();
-    return new ACPClient({ host, apiKey }).discoverModels({
+    return new ACPClient({ host, apiKey }).discover({
       agent_settings: { agent_kind: "acp", acp_server: server },
       secrets: buildCustomSecrets(secretNames.map((name) => ({ name }))),
+      working_dir: workingDir,
     });
   }
 }

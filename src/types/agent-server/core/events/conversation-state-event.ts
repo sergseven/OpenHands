@@ -111,12 +111,17 @@ interface ConversationStateUpdateEventBase extends BaseEvent {
    * Unique key for this state update event.
    * Can be "full_state" for full state snapshots or field names for partial updates.
    */
-  key: "full_state" | "execution_status" | "stats" | "goal"; // Extend with other keys as needed
+  key: "full_state" | "execution_status" | "stats" | "goal" | "agent_state"; // Extend with other keys as needed
 
   /**
    * Conversation state updates
    */
-  value: ConversationState | ExecutionStatus | ConversationStats | GoalStatus;
+  value:
+    | ConversationState
+    | ExecutionStatus
+    | ConversationStats
+    | GoalStatus
+    | Record<string, unknown>;
 }
 
 // Narrowed interfaces for full state update event
@@ -143,12 +148,19 @@ export interface ConversationStateUpdateEventGoal extends ConversationStateUpdat
   value: GoalStatus;
 }
 
+// Narrowed interface for agent-owned state (e.g. an ACP session's commands)
+export interface ConversationStateUpdateEventAgentState extends ConversationStateUpdateEventBase {
+  key: "agent_state";
+  value: Record<string, unknown>;
+}
+
 // Conversation state update event - contains conversation state updates
 export type ConversationStateUpdateEvent =
   | ConversationStateUpdateEventFullState
   | ConversationStateUpdateEventAgentStatus
   | ConversationStateUpdateEventStats
-  | ConversationStateUpdateEventGoal;
+  | ConversationStateUpdateEventGoal
+  | ConversationStateUpdateEventAgentState;
 
 // Server error event - contains error information
 export interface ServerErrorEvent extends BaseEvent {

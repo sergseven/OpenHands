@@ -31,6 +31,7 @@ import {
   isAgentStatusConversationStateUpdateEvent,
   isStatsConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
+  isAgentStateConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
   isDisplayableErrorEvent,
@@ -742,6 +743,16 @@ export function ConversationWebSocketProvider({
             // and stats branches above), not a merge artifact.
             if (isGoalConversationStateUpdateEvent(event) && conversationId) {
               useGoalStore.getState().setStatus(conversationId, event.value);
+            }
+            // Agent-owned state (an ACP session's slash commands) is served
+            // through ConversationInfo; refetch it.
+            if (
+              isAgentStateConversationStateUpdateEvent(event) &&
+              conversationId
+            ) {
+              queryClient.invalidateQueries({
+                queryKey: ["user", "conversation", conversationId],
+              });
             }
           }
 

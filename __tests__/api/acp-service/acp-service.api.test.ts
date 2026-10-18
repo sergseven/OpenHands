@@ -8,13 +8,13 @@ import AcpService from "#/api/acp-service/acp-service.api";
 
 // Capture the command the service runs and control the BashOutput it sees.
 const executeCommand = vi.hoisted(() => vi.fn());
-const discoverModels = vi.hoisted(() => vi.fn());
+const discover = vi.hoisted(() => vi.fn());
 vi.mock("@openhands/typescript-client/clients", () => ({
   BashClient: class {
     executeCommand = executeCommand;
   },
   ACPClient: class {
-    discoverModels = discoverModels;
+    discover = discover;
   },
 }));
 vi.mock("#/api/agent-server-client-options", () => ({
@@ -180,15 +180,15 @@ describe("AcpService.getAuthStatus", () => {
   });
 });
 
-describe("AcpService.discoverModels", () => {
-  it("sends the built-in agent and the saved secrets by reference", async () => {
-    discoverModels.mockResolvedValue({ current_model_id: "default" });
+describe("AcpService.discover", () => {
+  it("sends the built-in agent, the saved secrets by reference and the working dir", async () => {
+    discover.mockResolvedValue({ current_model_id: "default" });
 
     await expect(
-      AcpService.discoverModels("claude-code", ["ANTHROPIC_API_KEY"]),
+      AcpService.discover("claude-code", ["ANTHROPIC_API_KEY"], "/work/repo"),
     ).resolves.toEqual({ current_model_id: "default" });
 
-    expect(discoverModels).toHaveBeenCalledWith({
+    expect(discover).toHaveBeenCalledWith({
       agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
       secrets: {
         ANTHROPIC_API_KEY: expect.objectContaining({
@@ -196,6 +196,7 @@ describe("AcpService.discoverModels", () => {
           url: "/api/settings/secrets/ANTHROPIC_API_KEY",
         }),
       },
+      working_dir: "/work/repo",
     });
   });
 });

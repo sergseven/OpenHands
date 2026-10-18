@@ -36,8 +36,8 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 
 // What the provider's own server reports; empty unless a test sets it.
 const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
-vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
+vi.mock("#/hooks/query/use-acp-discovery", () => ({
+  useAcpDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
 }));
 const NO_DISCOVERY = {
   discovery: null,

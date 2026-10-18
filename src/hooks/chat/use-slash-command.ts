@@ -6,6 +6,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { useAcpSlashCommands } from "./use-acp-slash-commands";
 
 export type SlashCommandSkill = SkillInfo;
 
@@ -13,6 +14,8 @@ export interface SlashCommandItem {
   skill: SlashCommandSkill;
   /** The slash command string, e.g. "/random-number" */
   command: string;
+  /** Placeholder for the command's argument, shown after it in the menu. */
+  argumentHint?: string | null;
 }
 
 type SlashCompletionKind = "command" | "model-profile";
@@ -39,6 +42,8 @@ export const useSlashCommand = (
   // Scope the skill catalog to this conversation's attached workspace so the
   // slash menu lists the same project skills that were loaded into it.
   const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
+  // ACP agents run their own commands, so they replace the skills catalog.
+  const acpCommands = useAcpSlashCommands();
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const freeModels = useFreeModels();
@@ -60,6 +65,28 @@ export const useSlashCommand = (
       return true;
     });
 
+    if (acpCommands) {
+      // A built-in keeps its name; the agent's command of the same name is
+      // left out (it can still be typed, but the built-in handles it).
+      const builtIn = new Set(items.map((item) => item.command));
+      acpCommands.forEach(({ name, description, input_hint: inputHint }) => {
+        const command = `/${name}`;
+        if (builtIn.has(command)) return;
+        items.push({
+          command,
+          argumentHint: inputHint,
+          skill: {
+            name,
+            type: "agentskills",
+            source: null,
+            description,
+            triggers: [command],
+          },
+        });
+      });
+      return items;
+    }
+
     // Wait for skills to finish initial load so all commands appear together
     if (isSkillsLoading) return items;
 
@@ -79,7 +106,7 @@ export const useSlashCommand = (
       }
     });
     return items;
-  }, [skills, isSkillsLoading, isCloud]);
+  }, [acpCommands, skills, isSkillsLoading, isCloud]);
 
   const modelProfileItems = useMemo<SlashCommandItem[]>(() => {
     return (profilesData?.profiles ?? []).map((profile) => {
@@ -105,12 +132,18 @@ export const useSlashCommand = (
       completionKind === "model-profile" ? modelProfileItems : slashItems;
     if (!filterText) return sourceItems;
     const lower = filterText.toLowerCase();
-    return sourceItems.filter(
-      (item) =>
-        item.command.toLowerCase().includes(lower) ||
-        item.skill.name.toLowerCase().includes(lower) ||
-        item.skill.content?.toLowerCase().includes(lower),
-    );
+    const nameMatches = (item: SlashCommandItem) =>
+      item.command.toLowerCase().includes(lower) ||
+      item.skill.name.toLowerCase().includes(lower);
+    const textMatches = (item: SlashCommandItem) =>
+      item.skill.description?.toLowerCase().includes(lower) ||
+      item.skill.content?.toLowerCase().includes(lower);
+    // Name matches first, so "/comp" puts /compact above commands that only
+    // mention "complete" in their description.
+    return [
+      ...sourceItems.filter(nameMatches),
+      ...sourceItems.filter((item) => !nameMatches(item) && textMatches(item)),
+    ];
   }, [completionKind, modelProfileItems, slashItems, filterText]);
 
   // Keep refs in sync so handleSlashKeyDown always reads the latest values,

@@ -48,10 +48,9 @@ vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
 }));
 
-const useAcpModelDiscoveryMock = vi.fn();
-vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: (...args: unknown[]) =>
-    useAcpModelDiscoveryMock(...args),
+const useAcpDiscoveryMock = vi.fn();
+vi.mock("#/hooks/query/use-acp-discovery", () => ({
+  useAcpDiscovery: (...args: unknown[]) => useAcpDiscoveryMock(...args),
 }));
 
 const useAcpSessionModelsMock = vi.fn();
@@ -97,8 +96,8 @@ describe("useChatInputModelState", () => {
     useActiveAcpProfileDetailMock.mockReturnValue(null);
     useCanManageOrgProfilesMock.mockReset();
     useCanManageOrgProfilesMock.mockReturnValue(true);
-    useAcpModelDiscoveryMock.mockReset();
-    useAcpModelDiscoveryMock.mockReturnValue(NO_LIVE_MODELS);
+    useAcpDiscoveryMock.mockReset();
+    useAcpDiscoveryMock.mockReturnValue(NO_LIVE_MODELS);
     useAcpSessionModelsMock.mockReset();
     useAcpSessionModelsMock.mockImplementation(
       (conversation) => conversation?.acp_available_models ?? [],
@@ -152,9 +151,10 @@ describe("useChatInputModelState", () => {
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.displayModel).toBe("SWE-2 High");
     expect(result.current.showAcpPicker).toBe(true);
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null, {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith(null, {
       enabled: true,
       secretRefs: null,
+      workingDir: null,
     });
   });
 
@@ -175,16 +175,17 @@ describe("useChatInputModelState", () => {
       { id: "gpt-6-astra", label: "GPT-6 Astra" },
       { id: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
     ];
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: live,
       defaultModelId: "gpt-6-astra",
     });
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("codex", {
       enabled: true,
       secretRefs: null,
+      workingDir: null,
     });
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("gpt-5.6-terra");
@@ -197,6 +198,7 @@ describe("useChatInputModelState", () => {
         agent_kind: "acp",
         acp_server: "codex",
         llm_model: "gpt-5.6-terra",
+        selected_workspace: "/work/repo",
         launched_agent_profile: {
           agent_profile_id: "id-codex",
           revision: 3,
@@ -219,9 +221,10 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("codex", {
       enabled: true,
       secretRefs: ["OPENAI_API_KEY"],
+      workingDir: "/work/repo",
     });
   });
 
@@ -241,16 +244,17 @@ describe("useChatInputModelState", () => {
       { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
       { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
     ];
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: live,
       defaultModelId: "anthropic/claude-opus-4-8",
     });
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("pi", {
       enabled: true,
       secretRefs: null,
+      workingDir: null,
     });
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("anthropic/claude-opus-4-8");
@@ -335,7 +339,7 @@ describe("useChatInputModelState", () => {
         destinationLabel: "Agent",
       }),
     );
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: CLAUDE_MODELS,
       defaultModelId: "default",
     });
@@ -358,7 +362,7 @@ describe("useChatInputModelState", () => {
     useAcpModelContextMock.mockReturnValue(
       acpContext({ isHomeAcp: true, isAcpContext: true }),
     );
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: CLAUDE_MODELS,
       defaultModelId: "default",
     });
@@ -380,7 +384,7 @@ describe("useChatInputModelState", () => {
     useAcpModelContextMock.mockReturnValue(
       acpContext({ isHomeAcp: true, isAcpContext: true }),
     );
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: CLAUDE_MODELS,
       defaultModelId: null,
     });
@@ -404,7 +408,7 @@ describe("useChatInputModelState", () => {
     useAcpModelContextMock.mockReturnValue(
       acpContext({ isHomeAcp: true, isAcpContext: true }),
     );
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: [],
       defaultModelId: "gemini-3-flash-preview",
     });
@@ -439,7 +443,7 @@ describe("useChatInputModelState", () => {
       acpContext({ isHomeAcp: true, isAcpContext: true }),
     );
     const codexModels = [{ id: "gpt-5.5", label: "GPT-5.5" }];
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: codexModels,
       defaultModelId: null,
     });
@@ -447,9 +451,10 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(result.current.currentModelId).toBe("gpt-5.5");
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("codex", {
       enabled: true,
       secretRefs: null,
+      workingDir: null,
     });
     expect(result.current.availableAcpModels).toEqual(codexModels);
   });
@@ -469,9 +474,10 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("codex", {
       enabled: true,
       secretRefs: ["OPENAI_API_KEY"],
+      workingDir: null,
     });
   });
 
@@ -485,9 +491,10 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpDiscoveryMock).toHaveBeenCalledWith("codex", {
       enabled: false,
       secretRefs: null,
+      workingDir: null,
     });
   });
 
@@ -505,7 +512,7 @@ describe("useChatInputModelState", () => {
     useAcpModelContextMock.mockReturnValue(
       acpContext({ isHomeAcp: true, isAcpContext: true }),
     );
-    useAcpModelDiscoveryMock.mockReturnValue({
+    useAcpDiscoveryMock.mockReturnValue({
       models: CLAUDE_MODELS,
       defaultModelId: null,
     });
